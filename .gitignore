@@ -1,0 +1,14 @@
+# Go binaries
+bin/
+*.exe
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Coverage reports
+web/coverage/
+
+# OS
+.DS_Store
