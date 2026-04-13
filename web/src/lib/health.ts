@@ -44,7 +44,7 @@ export function severityScore(
   if (upgradeSeverity === 'major') score += 400
   if (health === 'Degraded') score += 300
   if (upgradeSeverity === 'minor') score += 200
-  if (driftCount > 0) score += 100
-  if (upgradeSeverity === 'patch') score += 50
+  if (upgradeSeverity === 'patch') score += 100
+  if (driftCount > 0) score += 50
   return score
 }
