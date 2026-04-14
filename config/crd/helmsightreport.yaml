@@ -1,0 +1,162 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: helmsightreports.helmsight.io
+  labels:
+    app.kubernetes.io/name: helmsight
+    app.kubernetes.io/component: crd
+spec:
+  group: helmsight.io
+  names:
+    kind: HelmSightReport
+    listKind: HelmSightReportList
+    plural: helmsightreports
+    singular: helmsightreport
+    shortNames:
+      - hsr
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Health
+          type: string
+          jsonPath: .spec.health
+          description: Aggregated health status
+        - name: Chart
+          type: string
+          jsonPath: .spec.chartVersion
+          description: Installed chart version
+        - name: Latest
+          type: string
+          jsonPath: .spec.versionStatus.latest
+          description: Latest available chart version
+        - name: Drift
+          type: integer
+          jsonPath: .spec.driftCount
+          description: Number of values drift entries
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: HelmSightReport aggregates health, version and drift data for a single Helm release.
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [name, namespace, chartName, chartVersion, health, status]
+              properties:
+                name:
+                  type: string
+                  description: Helm release name
+                namespace:
+                  type: string
+                  description: Kubernetes namespace
+                chartName:
+                  type: string
+                chartVersion:
+                  type: string
+                appVersion:
+                  type: string
+                status:
+                  type: string
+                  enum: [deployed, failed, pending-install, superseded, uninstalled]
+                health:
+                  type: string
+                  enum: [Healthy, Degraded, Failed, Unknown]
+                podDesired:
+                  type: integer
+                  minimum: 0
+                podReady:
+                  type: integer
+                  minimum: 0
+                driftCount:
+                  type: integer
+                  minimum: 0
+                revision:
+                  type: integer
+                  minimum: 1
+                lastReconciled:
+                  type: string
+                  format: date-time
+                firstDeployed:
+                  type: string
+                  format: date-time
+                lastDeployed:
+                  type: string
+                  format: date-time
+                versionStatus:
+                  type: object
+                  properties:
+                    installed:
+                      type: string
+                    latest:
+                      type: string
+                    latestAppVersion:
+                      type: string
+                    upgradeAvailable:
+                      type: boolean
+                    severity:
+                      type: string
+                      enum: [none, patch, minor, major]
+                workloads:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      kind:
+                        type: string
+                        enum: [Deployment, StatefulSet, DaemonSet]
+                      desired:
+                        type: integer
+                      ready:
+                        type: integer
+                      health:
+                        type: string
+                        enum: [Healthy, Degraded, Failed, Unknown]
+                driftEntries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key:
+                        type: string
+                      type:
+                        type: string
+                        enum: [added, removed, modified]
+                      severity:
+                        type: string
+                        enum: [low, medium, high]
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
