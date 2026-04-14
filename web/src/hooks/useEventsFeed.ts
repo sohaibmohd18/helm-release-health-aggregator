@@ -1,85 +1,25 @@
 /**
- * useEventsFeed — mock implementation of the live event stream.
+ * useEventsFeed — real WebSocket connection to /api/v1/ws/events.
  *
- * Exposes the same shape that the real WebSocket hook (Part 16) will expose:
+ * Exposes the same shape as the mock implementation:
  *   { events, connected, clearEvents }
  *
- * In Part 16, swap the body of this hook for a real WebSocket connection.
- * No component code changes required.
+ * Reconnects automatically with capped exponential backoff (1 s → 30 s).
+ * The Vite dev proxy (vite.config.ts server.proxy) forwards the WS upgrade
+ * to the Go backend, so no CORS configuration is needed in development.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { mockEvents, mockReleases } from '@/api/mock'
-import type { HelmEvent, EventType } from '@/types'
+import type { HelmEvent } from '@/types'
 
-// ---------------------------------------------------------------------------
-// Random event generator — same schema as real WS messages
-// ---------------------------------------------------------------------------
+// Maximum number of events kept in memory.
+const MAX_EVENTS = 500
 
-let idCounter = 1000
-
-function randomItem<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+// Build the WebSocket URL from the current page origin so it works both in
+// development (proxied by Vite) and in production (same-origin serving).
+function wsURL(): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}/api/v1/ws/events`
 }
-
-const EVENT_TEMPLATES: Array<{
-  type: EventType
-  severity: HelmEvent['severity']
-  descFn: (name: string) => string
-  delta?: HelmEvent['delta']
-}> = [
-  {
-    type: 'reconciled',
-    severity: 'info',
-    descFn: name => `Release ${name} reconciled successfully`,
-  },
-  {
-    type: 'health_changed',
-    severity: 'warning',
-    descFn: name => `Health changed for ${name}: Healthy → Degraded`,
-    delta: { health: 'Degraded', previousHealth: 'Healthy' },
-  },
-  {
-    type: 'health_changed',
-    severity: 'error',
-    descFn: name => `Health changed for ${name}: Degraded → Failed`,
-    delta: { health: 'Failed', previousHealth: 'Degraded' },
-  },
-  {
-    type: 'upgrade_available',
-    severity: 'warning',
-    descFn: name => `New chart version available for ${name}`,
-    delta: { upgradeAvailable: true, latestVersion: '99.0.0' },
-  },
-  {
-    type: 'drift_detected',
-    severity: 'warning',
-    descFn: name => `Values drift detected in ${name}: 2 keys changed`,
-  },
-  {
-    type: 'error',
-    severity: 'error',
-    descFn: name => `Pod crash loop detected in ${name}`,
-  },
-]
-
-function generateEvent(): HelmEvent {
-  const release = randomItem(mockReleases)
-  const tpl = randomItem(EVENT_TEMPLATES)
-  return {
-    id: `evt-gen-${idCounter++}`,
-    type: tpl.type,
-    namespace: release.namespace,
-    release: release.name,
-    timestamp: new Date().toISOString(),
-    description: tpl.descFn(release.name),
-    severity: tpl.severity,
-    delta: tpl.delta,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export interface EventFeedState {
   events: HelmEvent[]
@@ -88,21 +28,60 @@ export interface EventFeedState {
 }
 
 export function useEventsFeed(): EventFeedState {
-  const [events, setEvents] = useState<HelmEvent[]>([...mockEvents])
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [events, setEvents] = useState<HelmEvent[]>([])
+  const [connected, setConnected] = useState(false)
 
-  // Simulate a WebSocket connection — always "Connected" in mock mode
-  const connected = true
+  const wsRef = useRef<WebSocket | null>(null)
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryDelay = useRef(1_000)
+  const unmounted = useRef(false)
 
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setEvents(prev => [generateEvent(), ...prev])
-    }, 8_000)
+  const connect = useCallback(() => {
+    if (unmounted.current) return
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+    const ws = new WebSocket(wsURL())
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      if (unmounted.current) { ws.close(); return }
+      setConnected(true)
+      retryDelay.current = 1_000 // reset backoff on success
+    }
+
+    ws.onmessage = (ev: MessageEvent<string>) => {
+      try {
+        const event = JSON.parse(ev.data) as HelmEvent
+        setEvents(prev => [event, ...prev].slice(0, MAX_EVENTS))
+      } catch {
+        // ignore malformed messages
+      }
+    }
+
+    ws.onclose = () => {
+      if (unmounted.current) return
+      setConnected(false)
+      // Exponential backoff capped at 30 s
+      retryRef.current = setTimeout(() => {
+        retryDelay.current = Math.min(retryDelay.current * 2, 30_000)
+        connect()
+      }, retryDelay.current)
+    }
+
+    ws.onerror = () => {
+      // onclose fires after onerror — reconnect logic is handled there
+      ws.close()
     }
   }, [])
+
+  useEffect(() => {
+    unmounted.current = false
+    connect()
+    return () => {
+      unmounted.current = true
+      if (retryRef.current) clearTimeout(retryRef.current)
+      wsRef.current?.close()
+    }
+  }, [connect])
 
   const clearEvents = useCallback(() => setEvents([]), [])
 

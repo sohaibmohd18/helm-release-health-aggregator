@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS releases (
     pod_desired     INTEGER NOT NULL DEFAULT 0,
     pod_ready       INTEGER NOT NULL DEFAULT 0,
     drift_count     INTEGER NOT NULL DEFAULT 0,
-    version_status  TEXT NOT NULL DEFAULT '{"installed":"","latest":"","upgradeAvailable":false,"severity":"none","latestAppVersion":""}',
+    version_status  TEXT NOT NULL DEFAULT '{"deployed":"","latest":"","upgradeAvailable":false,"severity":"none","skippedVersions":0}',
     last_reconciled TEXT NOT NULL DEFAULT '',
     first_deployed  TEXT NOT NULL DEFAULT '',
     last_deployed   TEXT NOT NULL DEFAULT '',

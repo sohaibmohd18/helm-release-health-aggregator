@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
 	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
@@ -66,18 +67,48 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 	var healthFilters []v1alpha1.HealthStatus
 	if h := q.Get("health"); h != "" {
 		for _, v := range strings.Split(h, ",") {
-			healthFilters = append(healthFilters, v1alpha1.HealthStatus(v))
+			healthFilters = append(healthFilters, v1alpha1.HealthStatus(strings.TrimSpace(v)))
 		}
 	}
 
+	// Support comma-separated or repeated namespace params.
+	var namespaces []string
+	for _, ns := range q["namespace"] {
+		for _, n := range strings.Split(ns, ",") {
+			if t := strings.TrimSpace(n); t != "" {
+				namespaces = append(namespaces, t)
+			}
+		}
+	}
+
+	var upgradeAvailable *bool
+	if v := q.Get("upgradeAvailable"); v == "true" {
+		t := true
+		upgradeAvailable = &t
+	} else if v == "false" {
+		f := false
+		upgradeAvailable = &f
+	}
+
+	var hasDrift *bool
+	if v := q.Get("hasDrift"); v == "true" {
+		t := true
+		hasDrift = &t
+	} else if v == "false" {
+		f := false
+		hasDrift = &f
+	}
+
 	filters := v1alpha1.ReleaseFilters{
-		Namespace: q.Get("namespace"),
-		Health:    healthFilters,
-		Search:    q.Get("search"),
-		SortBy:    q.Get("sort"),
-		SortOrder: q.Get("order"),
-		Page:      page,
-		PageSize:  pageSize,
+		Namespaces:       namespaces,
+		Health:           healthFilters,
+		Search:           q.Get("search"),
+		SortBy:           q.Get("sort"),
+		SortOrder:        q.Get("order"),
+		Page:             page,
+		PageSize:         pageSize,
+		UpgradeAvailable: upgradeAvailable,
+		HasDrift:         hasDrift,
 	}
 
 	releases, total, err := s.db.ListReleases(filters)
@@ -107,15 +138,12 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
-	// Extract path segments: /api/v1/releases/{namespace}/{name}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	// parts: ["api","v1","releases",namespace,name]
-	if len(parts) < 5 {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+	if namespace == "" || name == "" {
 		writeError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
-	namespace := parts[3]
-	name := parts[4]
 
 	detail, err := s.db.GetRelease(namespace, name)
 	if err != nil {

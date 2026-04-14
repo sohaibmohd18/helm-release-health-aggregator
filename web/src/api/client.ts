@@ -1,21 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ListResponse, Release, ReleaseDetail, ClusterSummary, NamespaceSummary, HelmEvent, UpgradeCandidate } from '@/types'
-import {
-  mockReleases,
-  mockReleaseDetails,
-  mockClusterSummary,
-  mockNamespaceSummaries,
-  mockEvents,
-  mockUpgradeCandidates,
-} from './mock'
 
 // ---------------------------------------------------------------------------
-// Utility
+// Base URL
+// VITE_API_BASE_URL is empty in production (same-origin) and set to
+// http://localhost:8080 only if bypassing the Vite dev proxy.
 // ---------------------------------------------------------------------------
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
+const BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 // ---------------------------------------------------------------------------
 // Filter types
@@ -32,65 +24,67 @@ export interface ReleasesFilter {
 }
 
 // ---------------------------------------------------------------------------
-// Hooks — swap mock data source for real fetch in Part 16
-// To migrate: replace the `queryFn` body with `await fetch(BASE_URL + '/api/v1/...')`
+// Core fetch helper — throws on non-2xx responses
+// ---------------------------------------------------------------------------
+
+async function fetchJSON<T>(path: string): Promise<T> {
+  const res = await fetch(BASE + path)
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`${res.status} ${text}`)
+  }
+  return res.json() as Promise<T>
+}
+
+// ---------------------------------------------------------------------------
+// Hooks — Part 16: real fetch calls backed by the Go REST API
 // ---------------------------------------------------------------------------
 
 export function useClusterSummary() {
   return useQuery<ClusterSummary>({
     queryKey: ['clusterSummary'],
-    queryFn: async () => {
-      await delay(350)
-      return mockClusterSummary
-    },
+    queryFn: () => fetchJSON('/api/v1/cluster/summary'),
   })
 }
 
 export function useNamespaceSummaries() {
   return useQuery<NamespaceSummary[]>({
     queryKey: ['namespaceSummaries'],
-    queryFn: async () => {
-      await delay(300)
-      return mockNamespaceSummaries
-    },
+    queryFn: () => fetchJSON('/api/v1/namespaces/summaries'),
   })
 }
 
 export function useReleases(filters: ReleasesFilter = {}) {
   return useQuery<ListResponse<Release>>({
     queryKey: ['releases', filters],
-    queryFn: async () => {
-      await delay(400)
-      let items = [...mockReleases]
+    queryFn: () => {
+      const params = new URLSearchParams()
 
       if (filters.namespaces && filters.namespaces.length > 0) {
-        items = items.filter(r => filters.namespaces!.includes(r.namespace))
+        // Backend accepts comma-separated namespace values
+        params.set('namespace', filters.namespaces.join(','))
       }
       if (filters.health && filters.health.length > 0) {
-        items = items.filter(r => filters.health!.includes(r.health))
+        params.set('health', filters.health.join(','))
       }
       if (filters.upgradeAvailable !== undefined) {
-        items = items.filter(r => r.versionStatus.upgradeAvailable === filters.upgradeAvailable)
+        params.set('upgradeAvailable', String(filters.upgradeAvailable))
       }
       if (filters.hasDrift !== undefined) {
-        if (filters.hasDrift) {
-          items = items.filter(r => r.driftCount > 0)
-        } else {
-          items = items.filter(r => r.driftCount === 0)
-        }
+        params.set('hasDrift', String(filters.hasDrift))
       }
       if (filters.search) {
-        const q = filters.search.toLowerCase()
-        items = items.filter(r => r.name.toLowerCase().includes(q) || r.chartName.toLowerCase().includes(q))
+        params.set('search', filters.search)
+      }
+      if (filters.page != null) {
+        params.set('page', String(filters.page))
+      }
+      if (filters.pageSize != null) {
+        params.set('pageSize', String(filters.pageSize))
       }
 
-      const page = filters.page ?? 1
-      const pageSize = filters.pageSize ?? 25
-      const total = items.length
-      const start = (page - 1) * pageSize
-      const paged = items.slice(start, start + pageSize)
-
-      return { items: paged, total, page, pageSize }
+      const qs = params.toString()
+      return fetchJSON(`/api/v1/releases${qs ? `?${qs}` : ''}`)
     },
   })
 }
@@ -98,13 +92,7 @@ export function useReleases(filters: ReleasesFilter = {}) {
 export function useRelease(namespace: string, name: string) {
   return useQuery<ReleaseDetail>({
     queryKey: ['release', namespace, name],
-    queryFn: async () => {
-      await delay(450)
-      const id = `${namespace}/${name}`
-      const detail = mockReleaseDetails[id]
-      if (!detail) throw new Error(`Release ${id} not found`)
-      return detail
-    },
+    queryFn: () => fetchJSON(`/api/v1/releases/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`),
     enabled: Boolean(namespace && name),
   })
 }
@@ -112,19 +100,13 @@ export function useRelease(namespace: string, name: string) {
 export function useUpgrades() {
   return useQuery<UpgradeCandidate[]>({
     queryKey: ['upgrades'],
-    queryFn: async () => {
-      await delay(350)
-      return mockUpgradeCandidates
-    },
+    queryFn: () => fetchJSON('/api/v1/upgrades'),
   })
 }
 
 export function useEvents() {
   return useQuery<HelmEvent[]>({
     queryKey: ['events'],
-    queryFn: async () => {
-      await delay(300)
-      return mockEvents
-    },
+    queryFn: () => fetchJSON('/api/v1/events'),
   })
 }
