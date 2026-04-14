@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
 // Suppress "act(...)" warnings from async state updates in TanStack Query
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 // Recharts uses ResizeObserver for ResponsiveContainer — jsdom doesn't have it
 globalThis.ResizeObserver = class ResizeObserver {

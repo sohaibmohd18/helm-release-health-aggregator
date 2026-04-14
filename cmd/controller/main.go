@@ -15,6 +15,8 @@ import (
 
 	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/api"
 	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/controller"
+	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/health"
+	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/registry"
 	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/store"
 )
 
@@ -23,11 +25,12 @@ func main() {
 		addr        = flag.String("addr", envOrDefault("HELMSIGHT_ADDR", ":8080"), "HTTP listen address")
 		dbPath      = flag.String("db", envOrDefault("HELMSIGHT_DB", "helmsight.db"), "SQLite database path")
 		clusterName = flag.String("cluster", envOrDefault("HELMSIGHT_CLUSTER", "local"), "Cluster display name")
+		kubeconfig  = flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig (defaults to in-cluster, then ~/.kube/config)")
+		workers     = flag.Int("workers", 4, "Concurrent reconcile workers")
 		dev         = flag.Bool("dev", false, "Development mode (human-readable logs)")
 	)
 	flag.Parse()
 
-	// Logger
 	log := newLogger(*dev)
 	defer func() { _ = log.Sync() }()
 
@@ -59,13 +62,26 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Reconciler (stub in Part 9 — wired to Kubernetes in Part 14)
-	rec := controller.NewReconciler(db, log)
-	if err := rec.Start(); err != nil {
-		log.Fatal("start reconciler", zap.Error(err))
+	// Cancellable root context — cancelled on SIGTERM/SIGINT
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Reconciler
+	rec, err := controller.NewReconciler(db, hub, registry.NewChecker(), health.NewAggregator(), log, controller.Config{
+		KubeconfigPath: *kubeconfig,
+		Workers:        *workers,
+	})
+	if err != nil {
+		log.Fatal("build reconciler", zap.Error(err))
 	}
 
-	// Start HTTP in background
+	go func() {
+		if err := rec.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Error("reconciler exited", zap.Error(err))
+		}
+	}()
+
+	// Start HTTP server
 	go func() {
 		log.Info("HTTP server listening", zap.String("addr", *addr))
 		if err := httpSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
@@ -73,15 +89,17 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown on SIGTERM / SIGINT
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
 
 	log.Info("shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := httpSrv.Shutdown(ctx); err != nil {
+	cancel() // stop reconciler
+
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutCancel()
+	if err := httpSrv.Shutdown(shutCtx); err != nil {
 		log.Error("http shutdown", zap.Error(err))
 	}
 	log.Info("goodbye")
