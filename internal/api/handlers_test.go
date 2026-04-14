@@ -9,8 +9,8 @@ import (
 
 	"go.uber.org/zap"
 
-	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/store"
+	v1alpha1 "github.com/sohaibmohmd18/helmsightss/pkg/apis/v1alpha1"
+	"github.com/sohaibmohmd18/helmsightss/internal/store"
 )
 
 // newTestServer opens an in-memory DB and returns a wired-up Server + chi router.

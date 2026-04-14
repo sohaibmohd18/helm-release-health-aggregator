@@ -28,7 +28,7 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" \
-    -o /helmsight ./cmd/controller/...
+    -o /helmsights ./cmd/controller/...
 
 # ─── Stage 3: Minimal runtime image ───────────────────────────────────────────
 FROM --platform=linux/amd64 gcr.io/distroless/static-debian12:nonroot
@@ -39,7 +39,7 @@ WORKDIR /
 COPY --from=go-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy the binary
-COPY --from=go-builder /helmsight /helmsight
+COPY --from=go-builder /helmsights /helmsights
 
 # Copy the static frontend so the server can serve it from web/dist/
 COPY --from=frontend-builder /app/web/dist /web/dist
@@ -49,4 +49,4 @@ EXPOSE 8080
 # distroless nonroot image runs as uid 65532
 USER nonroot:nonroot
 
-ENTRYPOINT ["/helmsight"]
+ENTRYPOINT ["/helmsights"]

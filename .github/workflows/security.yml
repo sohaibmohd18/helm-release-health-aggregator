@@ -98,12 +98,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image for scanning
-        run: docker build --platform linux/amd64 -t helmsight:scan .
+        run: docker build --platform linux/amd64 -t helmsights:scan .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: helmsight:scan
+          image-ref: helmsights:scan
           format: sarif
           output: trivy-image.sarif
           # Fail on CRITICAL and HIGH severity CVEs

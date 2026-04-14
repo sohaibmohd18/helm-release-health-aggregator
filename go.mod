@@ -1,4 +1,4 @@
-module github.com/sohaibmohmd18/helm-release-health-aggregator
+module github.com/sohaibmohmd18/helmsights
 
 go 1.25.0
 

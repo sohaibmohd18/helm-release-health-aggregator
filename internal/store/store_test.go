@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
+	v1alpha1 "github.com/sohaibmohmd18/helmsightss/pkg/apis/v1alpha1"
 )
 
 // openMem opens an in-memory SQLite database for testing.

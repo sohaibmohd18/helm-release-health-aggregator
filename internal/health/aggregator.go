@@ -10,7 +10,7 @@
 package health
 
 import (
-	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
+	v1alpha1 "github.com/sohaibmohmd18/helmsightss/pkg/apis/v1alpha1"
 )
 
 // Aggregator computes health for a Helm release.

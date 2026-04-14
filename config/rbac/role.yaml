@@ -1,9 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: helmsight
+  name: helmsights
   labels:
-    app.kubernetes.io/name: helmsight
+    app.kubernetes.io/name: helmsights
     app.kubernetes.io/component: rbac
 rules:
   # Read Helm release secrets (stored in each release namespace)
@@ -22,11 +22,11 @@ rules:
     verbs: ["get", "list", "watch"]
 
   # Full CRUD on our own CRD
-  - apiGroups: ["helmsight.io"]
-    resources: ["helmsightreports"]
+  - apiGroups: ["helmsights.io"]
+    resources: ["helmsightsreports"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # Update status subresource
-  - apiGroups: ["helmsight.io"]
-    resources: ["helmsightreports/status"]
+  - apiGroups: ["helmsights.io"]
+    resources: ["helmsightsreports/status"]
     verbs: ["get", "update", "patch"]

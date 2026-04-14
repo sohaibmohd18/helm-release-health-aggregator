@@ -102,13 +102,13 @@ The Vite dev server proxies all `/api` requests to `localhost:8080` — no CORS 
 
 ```bash
 # Go binary
-make build            # → bin/helmsight
+make build            # → bin/helmsights
 
 # Frontend production build
 make web-build        # → web/dist/
 
 # Docker image (linux/amd64)
-make docker-build     # → sohaibmohd/helmsight:latest
+make docker-build     # → sohaibmohd/helmsights:latest
 ```
 
 The Go binary serves the compiled frontend from `web/dist/` at runtime — a single binary deployment.
@@ -120,7 +120,7 @@ The Go binary serves the compiled frontend from `web/dist/` at runtime — a sin
 ### Using Kustomize
 
 ```bash
-kubectl create namespace helmsight
+kubectl create namespace helmsights
 kubectl apply -k config/deploy/
 ```
 
@@ -131,10 +131,10 @@ This creates:
 
 ### Using the published image
 
-The deployment references `sohaibmohd/helmsight:latest` from Docker Hub — no local build needed.
+The deployment references `sohaibmohd/helmsights:latest` from Docker Hub — no local build needed.
 
 ```bash
-docker pull sohaibmohd/helmsight:latest
+docker pull sohaibmohd/helmsights:latest
 ```
 
 ### Rolling deploy after image update
@@ -149,7 +149,7 @@ make docker-deploy
 Port-forward for quick access:
 
 ```bash
-kubectl port-forward -n helmsight svc/helmsight 8080:80
+kubectl port-forward -n helmsights svc/helmsights 8080:80
 # Open http://localhost:8080
 ```
 
@@ -163,9 +163,9 @@ All options are settable via flags or environment variables:
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--addr` | `HELMSIGHT_ADDR` | `:8080` | HTTP listen address |
-| `--db` | `HELMSIGHT_DB` | `helmsight.db` | SQLite database path |
-| `--cluster` | `HELMSIGHT_CLUSTER` | `local` | Cluster display name shown in the UI |
+| `--addr` | `HELMSIGHTS_ADDR` | `:8080` | HTTP listen address |
+| `--db` | `HELMSIGHTS_DB` | `helmsights.db` | SQLite database path |
+| `--cluster` | `HELMSIGHTS_CLUSTER` | `local` | Cluster display name shown in the UI |
 | `--kubeconfig` | `KUBECONFIG` | in-cluster → `~/.kube/config` | Path to kubeconfig |
 | `--workers` | — | `4` | Concurrent reconcile workers |
 | `--dev` | — | `false` | Human-readable (development) log format |
@@ -216,7 +216,7 @@ pkg/apis/v1alpha1/    # Shared Go types (JSON tags match TypeScript exactly)
 config/
   crd/                # CRD YAML manifests
   rbac/               # ClusterRole / Binding / ServiceAccount
-  deploy/             # Kustomize overlay (namespace: helmsight)
+  deploy/             # Kustomize overlay (namespace: helmsights)
 web/                  # React + Vite frontend
   src/
     api/              # TanStack Query hooks (client.ts) + test fixtures (mock.ts)
@@ -254,4 +254,4 @@ HelmSight runs with a `ClusterRole` that grants **read-only** access to:
 - `secrets` — to watch Helm release state across all namespaces
 - `pods`, `deployments`, `statefulsets`, `daemonsets`, `replicasets` — for workload health aggregation
 
-Full CRUD is granted only on its own `helmsightreports.helmsight.io` CRD resources.
+Full CRUD is granted only on its own `helmsightsreports.helmsights.io` CRD resources.

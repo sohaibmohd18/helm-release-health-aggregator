@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 
 function getInitialDark(): boolean {
   try {
-    const saved = localStorage.getItem('helmsight-theme')
+    const saved = localStorage.getItem('helmsights-theme')
     if (saved) return saved === 'dark'
   } catch { /* ignore */ }
   return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -18,7 +18,7 @@ function getInitialDark(): boolean {
 
 function applyDark(dark: boolean) {
   document.documentElement.classList.toggle('dark', dark)
-  try { localStorage.setItem('helmsight-theme', dark ? 'dark' : 'light') } catch { /* ignore */ }
+  try { localStorage.setItem('helmsights-theme', dark ? 'dark' : 'light') } catch { /* ignore */ }
 }
 
 export function useDarkMode() {

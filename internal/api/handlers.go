@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/store"
+	v1alpha1 "github.com/sohaibmohmd18/helmsightss/pkg/apis/v1alpha1"
+	"github.com/sohaibmohmd18/helmsightss/internal/store"
 )
 
 // Server holds the shared dependencies used by all HTTP handlers.

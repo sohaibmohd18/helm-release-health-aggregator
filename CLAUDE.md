@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A full-stack Helm release health aggregator. Platform engineers get a single dashboard showing every Helm release across all namespaces with four signals: pod/workload health, chart version staleness, values drift, and release status.
 
-**Current state:** Parts 1–16 complete. Full stack is operational: Go controller with real k8s informers, SQLite persistence, REST API, WebSocket event feed, and React frontend wired to the real API. Docker image published as `sohaibmohd/helmsight:latest`.
+**Current state:** Parts 1–16 complete. Full stack is operational: Go controller with real k8s informers, SQLite persistence, REST API, WebSocket event feed, and React frontend wired to the real API. Docker image published as `sohaibmohd/helmsights:latest`.
 
 ---
 
@@ -26,27 +26,27 @@ cd web && npx vitest --coverage                     # Run with coverage
 
 ### Backend (Go)
 ```bash
-make build          # Compile → bin/helmsight
+make build          # Compile → bin/helmsights
 make run            # go run ./cmd/controller/...
 make test           # go test ./... -v -race
 make fmt            # go fmt ./...
 make lint           # golangci-lint run ./...
-make docker-build   # Docker multi-stage build → sohaibmohd/helmsight:latest
+make docker-build   # Docker multi-stage build → sohaibmohd/helmsights:latest
 ```
 
 ### Docker
 ```bash
 # Build and push
-docker build -t sohaibmohd/helmsight:latest .
-docker push sohaibmohd/helmsight:latest
+docker build -t sohaibmohd/helmsights:latest .
+docker push sohaibmohd/helmsights:latest
 
 # Run locally (requires kubeconfig at ~/.kube/config)
-docker run -p 8080:8080 -v ~/.kube/config:/home/nonroot/.kube/config sohaibmohd/helmsight:latest
+docker run -p 8080:8080 -v ~/.kube/config:/home/nonroot/.kube/config sohaibmohd/helmsights:latest
 ```
 
 ### Deploy to Kubernetes
 ```bash
-kubectl apply -k config/deploy/   # Kustomize overlay (namespace: helmsight)
+kubectl apply -k config/deploy/   # Kustomize overlay (namespace: helmsights)
 ```
 
 ---
@@ -102,7 +102,7 @@ pkg/apis/v1alpha1/    # Shared Go types — JSON tags must match web/src/types/i
 config/
   crd/                # CRD YAML manifests
   rbac/               # ClusterRole/Binding/ServiceAccount
-  deploy/             # Kustomize overlay (namespace: helmsight)
+  deploy/             # Kustomize overlay (namespace: helmsights)
 chart/                # Helm chart for HelmSight itself
 web/                  # React frontend (Vite)
   src/

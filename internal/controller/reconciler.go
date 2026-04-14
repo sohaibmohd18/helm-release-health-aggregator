@@ -20,11 +20,11 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/health"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/helm"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/registry"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/store"
-	v1alpha1 "github.com/sohaibmohmd18/helm-release-health-aggregator/pkg/apis/v1alpha1"
+	"github.com/sohaibmohmd18/helmsightss/internal/health"
+	"github.com/sohaibmohmd18/helmsightss/internal/helm"
+	"github.com/sohaibmohmd18/helmsightss/internal/registry"
+	"github.com/sohaibmohmd18/helmsightss/internal/store"
+	v1alpha1 "github.com/sohaibmohmd18/helmsightss/pkg/apis/v1alpha1"
 )
 
 // EventBroadcaster publishes HelmEvents to connected WebSocket clients.

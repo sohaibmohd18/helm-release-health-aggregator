@@ -13,18 +13,18 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/api"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/controller"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/health"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/registry"
-	"github.com/sohaibmohmd18/helm-release-health-aggregator/internal/store"
+	"github.com/sohaibmohmd18/helmsightss/internal/api"
+	"github.com/sohaibmohmd18/helmsightss/internal/controller"
+	"github.com/sohaibmohmd18/helmsightss/internal/health"
+	"github.com/sohaibmohmd18/helmsightss/internal/registry"
+	"github.com/sohaibmohmd18/helmsightss/internal/store"
 )
 
 func main() {
 	var (
-		addr        = flag.String("addr", envOrDefault("HELMSIGHT_ADDR", ":8080"), "HTTP listen address")
-		dbPath      = flag.String("db", envOrDefault("HELMSIGHT_DB", "helmsight.db"), "SQLite database path")
-		clusterName = flag.String("cluster", envOrDefault("HELMSIGHT_CLUSTER", "local"), "Cluster display name")
+		addr        = flag.String("addr", envOrDefault("HELMSIGHTS_ADDR", ":8080"), "HTTP listen address")
+		dbPath      = flag.String("db", envOrDefault("HELMSIGHTS_DB", "helmsights.db"), "SQLite database path")
+		clusterName = flag.String("cluster", envOrDefault("HELMSIGHTS_CLUSTER", "local"), "Cluster display name")
 		kubeconfig  = flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig (defaults to in-cluster, then ~/.kube/config)")
 		workers     = flag.Int("workers", 4, "Concurrent reconcile workers")
 		dev         = flag.Bool("dev", false, "Development mode (human-readable logs)")
