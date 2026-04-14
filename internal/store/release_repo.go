@@ -124,13 +124,25 @@ func (db *DB) ClusterSummary(clusterName string) (v1alpha1.ClusterSummary, error
 			COALESCE(SUM(CASE WHEN health='Degraded' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN health='Failed'   THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN health='Unknown'  THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1 THEN 1 ELSE 0 END), 0)
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1
+			                   AND json_extract(version_status,'$.severity')='major' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1
+			                   AND json_extract(version_status,'$.severity')='minor' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1
+			                   AND json_extract(version_status,'$.severity')='patch' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(pod_desired), 0),
+			COALESCE(SUM(drift_count), 0)
 		FROM releases`)
 	var s v1alpha1.ClusterSummary
 	s.ClusterName = clusterName
 	s.LastUpdated = time.Now().UTC().Format(time.RFC3339)
-	err := row.Scan(&s.TotalReleases, &s.HealthyReleases, &s.DegradedReleases,
-		&s.FailedReleases, &s.UnknownReleases, &s.UpgradesAvailable)
+	err := row.Scan(
+		&s.TotalReleases, &s.HealthyReleases, &s.DegradedReleases,
+		&s.FailedReleases, &s.UnknownReleases, &s.UpgradesAvailable,
+		&s.MajorUpgrades, &s.MinorUpgrades, &s.PatchUpgrades,
+		&s.TotalPodsTracked, &s.TotalDriftEntries,
+	)
 	return s, err
 }
 
@@ -140,9 +152,10 @@ func (db *DB) NamespaceSummaries() ([]v1alpha1.NamespaceSummary, error) {
 		SELECT
 			namespace,
 			COUNT(*) AS total,
-			SUM(CASE WHEN health='Healthy'  THEN 1 ELSE 0 END),
-			SUM(CASE WHEN health='Degraded' THEN 1 ELSE 0 END),
-			SUM(CASE WHEN health='Failed'   THEN 1 ELSE 0 END)
+			COALESCE(SUM(CASE WHEN health='Healthy'  THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN health='Degraded' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN health='Failed'   THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1 THEN 1 ELSE 0 END), 0)
 		FROM releases
 		GROUP BY namespace
 		ORDER BY namespace`)
@@ -155,7 +168,7 @@ func (db *DB) NamespaceSummaries() ([]v1alpha1.NamespaceSummary, error) {
 	for rows.Next() {
 		var ns v1alpha1.NamespaceSummary
 		if err := rows.Scan(&ns.Namespace, &ns.ReleaseCount,
-			&ns.HealthyCount, &ns.DegradedCount, &ns.FailedCount); err != nil {
+			&ns.HealthyCount, &ns.DegradedCount, &ns.FailedCount, &ns.UpgradesAvailable); err != nil {
 			return nil, err
 		}
 		ns.Health = namespaceHealth(ns)
@@ -270,10 +283,23 @@ func buildWhere(f v1alpha1.ReleaseFilters) (string, []any) {
 	var clauses []string
 	var args []any
 
-	if f.Namespace != "" {
-		clauses = append(clauses, "namespace = ?")
-		args = append(args, f.Namespace)
+	// Single namespace (legacy) or multiple namespaces
+	nsList := f.Namespaces
+	if f.Namespace != "" && len(nsList) == 0 {
+		nsList = []string{f.Namespace}
 	}
+	if len(nsList) == 1 {
+		clauses = append(clauses, "namespace = ?")
+		args = append(args, nsList[0])
+	} else if len(nsList) > 1 {
+		ph := make([]string, len(nsList))
+		for i, ns := range nsList {
+			ph[i] = "?"
+			args = append(args, ns)
+		}
+		clauses = append(clauses, "namespace IN ("+strings.Join(ph, ",")+")")
+	}
+
 	if len(f.Health) > 0 {
 		placeholders := make([]string, len(f.Health))
 		for i, h := range f.Health {
@@ -287,6 +313,21 @@ func buildWhere(f v1alpha1.ReleaseFilters) (string, []any) {
 		like := "%" + f.Search + "%"
 		args = append(args, like, like)
 	}
+	if f.UpgradeAvailable != nil {
+		if *f.UpgradeAvailable {
+			clauses = append(clauses, "json_extract(version_status,'$.upgradeAvailable')=1")
+		} else {
+			clauses = append(clauses, "(json_extract(version_status,'$.upgradeAvailable')=0 OR json_extract(version_status,'$.upgradeAvailable') IS NULL)")
+		}
+	}
+	if f.HasDrift != nil {
+		if *f.HasDrift {
+			clauses = append(clauses, "drift_count > 0")
+		} else {
+			clauses = append(clauses, "drift_count = 0")
+		}
+	}
+
 	if len(clauses) == 0 {
 		return "", args
 	}

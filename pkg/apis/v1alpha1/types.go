@@ -27,29 +27,32 @@ const (
 type ReleaseStatus string
 
 const (
-	StatusDeployed   ReleaseStatus = "deployed"
-	StatusFailed     ReleaseStatus = "failed"
-	StatusPending    ReleaseStatus = "pending-install"
-	StatusSuperseded ReleaseStatus = "superseded"
-	StatusUninstalled ReleaseStatus = "uninstalled"
+	StatusDeployed        ReleaseStatus = "deployed"
+	StatusFailed          ReleaseStatus = "failed"
+	StatusPending         ReleaseStatus = "pending-install"
+	StatusPendingUpgrade  ReleaseStatus = "pending-upgrade"
+	StatusPendingRollback ReleaseStatus = "pending-rollback"
+	StatusSuperseded      ReleaseStatus = "superseded"
+	StatusUninstalled     ReleaseStatus = "uninstalled"
 )
 
 // DriftType classifies a single values drift entry.
+// Both "removed" and "modified" defaults map to "changed" to match the TS contract.
 type DriftType string
 
 const (
 	DriftAdded    DriftType = "added"
-	DriftRemoved  DriftType = "removed"
-	DriftModified DriftType = "modified"
+	DriftRemoved  DriftType = "changed" // default removed — treated as "changed"
+	DriftModified DriftType = "changed" // default value changed
 )
 
 // DriftSeverity classifies the impact of a drift entry.
 type DriftSeverity string
 
 const (
-	DriftLow    DriftSeverity = "low"
-	DriftMedium DriftSeverity = "medium"
-	DriftHigh   DriftSeverity = "high"
+	DriftLow    DriftSeverity = "info"    // cosmetic change
+	DriftMedium DriftSeverity = "warning" // image / version key
+	DriftHigh   DriftSeverity = "warning" // resource / replica key
 )
 
 // EventType classifies a Helm lifecycle event.
@@ -64,19 +67,23 @@ const (
 )
 
 // VersionStatus holds current and latest version info for a release.
+// JSON tag "deployed" matches the TypeScript VersionStatus.deployed field.
 type VersionStatus struct {
-	Installed        string          `json:"installed"`
+	Installed        string          `json:"deployed"`                  // TS: deployed
 	Latest           string          `json:"latest"`
 	UpgradeAvailable bool            `json:"upgradeAvailable"`
 	Severity         UpgradeSeverity `json:"severity"`
-	LatestAppVersion string          `json:"latestAppVersion"`
+	LatestAppVersion string          `json:"latestAppVersion,omitempty"`
+	SkippedVersions  int             `json:"skippedVersions"`
+	ChangelogURL     string          `json:"changelogUrl,omitempty"`
 }
 
 // DriftEntry represents a single values key that differs from chart defaults.
+// JSON tag "userValue" matches the TypeScript DriftEntry.userValue field.
 type DriftEntry struct {
 	Key           string        `json:"key"`
 	DefaultValue  any           `json:"defaultValue"`
-	DeployedValue any           `json:"deployedValue"`
+	DeployedValue any           `json:"userValue"` // TS: userValue
 	Type          DriftType     `json:"type"`
 	Severity      DriftSeverity `json:"severity"`
 }
@@ -88,24 +95,30 @@ type PodSummary struct {
 	Phase    string `json:"phase"`
 	Restarts int    `json:"restarts"`
 	Age      string `json:"age"`
+	Node     string `json:"node"`
 }
 
 // WorkloadSummary holds per-workload (Deployment/StatefulSet/DaemonSet) health.
+// Health is stored internally but not part of the TS contract; the frontend
+// derives display state from desired/ready counts.
 type WorkloadSummary struct {
-	Name    string       `json:"name"`
-	Kind    string       `json:"kind"`
-	Desired int          `json:"desired"`
-	Ready   int          `json:"ready"`
-	Health  HealthStatus `json:"health"`
+	Name      string       `json:"name"`
+	Kind      string       `json:"kind"`
+	Desired   int          `json:"desired"`
+	Ready     int          `json:"ready"`
+	Available int          `json:"available"`
+	Health    HealthStatus `json:"health"` // internal; extra field is harmless to TS
 }
 
 // RevisionEntry is one entry in a release's rollout history.
+// JSON tag "chartVersion" matches the TypeScript RevisionEntry.chartVersion field.
 type RevisionEntry struct {
 	Revision    int    `json:"revision"`
 	Status      string `json:"status"`
-	Chart       string `json:"chart"`
+	Chart       string `json:"chartVersion"` // TS: chartVersion
 	DeployedAt  string `json:"deployedAt"`
-	Description string `json:"description"`
+	DeployedBy  string `json:"deployedBy,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // Release is the list-view representation of a Helm release.
@@ -140,6 +153,7 @@ type ReleaseDetail struct {
 }
 
 // ClusterSummary is the top-level overview shown on the dashboard.
+// JSON field names match the TypeScript ClusterSummary interface exactly.
 type ClusterSummary struct {
 	ClusterName       string `json:"clusterName"`
 	TotalReleases     int    `json:"totalReleases"`
@@ -148,35 +162,45 @@ type ClusterSummary struct {
 	FailedReleases    int    `json:"failedReleases"`
 	UnknownReleases   int    `json:"unknownReleases"`
 	UpgradesAvailable int    `json:"upgradesAvailable"`
-	LastUpdated       string `json:"lastUpdated"`
+	MajorUpgrades     int    `json:"majorUpgrades"`
+	MinorUpgrades     int    `json:"minorUpgrades"`
+	PatchUpgrades     int    `json:"patchUpgrades"`
+	TotalPodsTracked  int    `json:"totalPodsTracked"`
+	TotalDriftEntries int    `json:"totalDriftEntries"`
+	LastUpdated       string `json:"lastScanTime"` // TS: lastScanTime
 }
 
 // NamespaceSummary aggregates health counts per namespace.
+// JSON field names match the TypeScript NamespaceSummary interface.
+// Internal count fields are not serialised (json:"-").
 type NamespaceSummary struct {
-	Namespace     string       `json:"namespace"`
-	ReleaseCount  int          `json:"releaseCount"`
-	HealthyCount  int          `json:"healthyCount"`
-	DegradedCount int          `json:"degradedCount"`
-	FailedCount   int          `json:"failedCount"`
-	Health        HealthStatus `json:"health"`
+	Namespace         string       `json:"namespace"`
+	ReleaseCount      int          `json:"releaseCount"`
+	HealthyCount      int          `json:"-"` // internal; used to derive Health
+	DegradedCount     int          `json:"-"` // internal
+	FailedCount       int          `json:"-"` // internal
+	Health            HealthStatus `json:"worstHealth"` // TS: worstHealth
+	UpgradesAvailable int          `json:"upgradesAvailable"`
 }
 
 // HelmEvent is a lifecycle event emitted during reconciliation.
+// Message is stored as "description" in JSON to match the TypeScript HelmEvent.
+// Details is stored as "delta" in JSON to match the TypeScript HelmEvent.delta.
 type HelmEvent struct {
 	ID        string         `json:"id"`
 	Timestamp string         `json:"timestamp"`
 	Type      EventType      `json:"type"`
 	Release   string         `json:"release"`
 	Namespace string         `json:"namespace"`
-	Message   string         `json:"message"`
+	Message   string         `json:"description"` // TS: description
 	Severity  string         `json:"severity"`
-	Details   map[string]any `json:"details,omitempty"`
+	Details   map[string]any `json:"delta,omitempty"` // TS: delta
 }
 
 // UpgradeCandidate pairs a release with its recommended upgrade info.
 type UpgradeCandidate struct {
 	Release            Release `json:"release"`
-	LatestVersion      string  `json:"latestVersion"`
+	LatestVersion      string  `json:"latestVersion,omitempty"`
 	HelmUpgradeCommand string  `json:"helmUpgradeCommand"`
 }
 
@@ -190,11 +214,14 @@ type ListResponse[T any] struct {
 
 // ReleaseFilters are the optional query parameters accepted by GET /api/v1/releases.
 type ReleaseFilters struct {
-	Namespace  string
-	Health     []HealthStatus
-	Search     string
-	SortBy     string
-	SortOrder  string
-	Page       int
-	PageSize   int
+	Namespace        string
+	Namespaces       []string // multi-namespace filter
+	Health           []HealthStatus
+	Search           string
+	SortBy           string
+	SortOrder        string
+	Page             int
+	PageSize         int
+	UpgradeAvailable *bool // nil = no filter; true = only with upgrade available
+	HasDrift         *bool // nil = no filter; true = only with drift entries
 }

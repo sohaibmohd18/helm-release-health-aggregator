@@ -135,10 +135,10 @@ spec:
                         type: string
                       type:
                         type: string
-                        enum: [added, removed, modified]
+                        enum: [added, changed]
                       severity:
                         type: string
-                        enum: [low, medium, high]
+                        enum: [info, warning]
             status:
               type: object
               properties:
