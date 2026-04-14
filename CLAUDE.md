@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A full-stack Helm release health aggregator. Platform engineers get a single dashboard showing every Helm release across all namespaces with four signals: pod/workload health, chart version staleness, values drift, and release status.
 
-**Current state:** Part 1 complete (scaffold + types + mock layer). Working through a strict waterfall — each part must be approved before the next begins.
+**Current state:** Parts 1–16 complete. Full stack is operational: Go controller with real k8s informers, SQLite persistence, REST API, WebSocket event feed, and React frontend wired to the real API. Docker image published as `sohaibmohd/helmsight:latest`.
 
 ---
 
@@ -18,11 +18,10 @@ make web-dev        # Start Vite dev server at http://localhost:5173
 make web-build      # Production build → web/dist/
 make web-install    # npm install
 
-# TypeScript check only (no emit)
-cd web && npx tsc --noEmit
-
-# Single test (once Vitest is configured in Part 8)
-cd web && npx vitest run src/path/to/file.test.tsx
+cd web && npx tsc --noEmit                          # TypeScript check only
+cd web && npx vitest run                             # Run all tests
+cd web && npx vitest run src/path/to/file.test.tsx  # Run single test file
+cd web && npx vitest --coverage                     # Run with coverage
 ```
 
 ### Backend (Go)
@@ -32,7 +31,22 @@ make run            # go run ./cmd/controller/...
 make test           # go test ./... -v -race
 make fmt            # go fmt ./...
 make lint           # golangci-lint run ./...
-make docker-build   # Docker multi-stage build
+make docker-build   # Docker multi-stage build → sohaibmohd/helmsight:latest
+```
+
+### Docker
+```bash
+# Build and push
+docker build -t sohaibmohd/helmsight:latest .
+docker push sohaibmohd/helmsight:latest
+
+# Run locally (requires kubeconfig at ~/.kube/config)
+docker run -p 8080:8080 -v ~/.kube/config:/home/nonroot/.kube/config sohaibmohd/helmsight:latest
+```
+
+### Deploy to Kubernetes
+```bash
+kubectl apply -k config/deploy/   # Kustomize overlay (namespace: helmsight)
 ```
 
 ---
@@ -55,14 +69,18 @@ make docker-build   # Docker multi-stage build
 
 ### Key architectural decisions
 
-**Mock → real API swap contract** (`web/src/api/client.ts`):
-All TanStack Query hooks source data from `web/src/api/mock.ts`. In Part 16, only `client.ts` changes — every `queryFn` body swaps a mock import for a `fetch(BASE_URL + '/api/v1/...')` call. No component code changes.
+**API client** (`web/src/api/client.ts`):
+All TanStack Query hooks call the Go REST API via `fetch('/api/v1/...')`. In development the Vite proxy (`vite.config.ts`) forwards `/api` to `localhost:8080`. Mock data in `web/src/api/mock.ts` is kept for tests only. Set `VITE_API_BASE_URL` env var to bypass the proxy.
 
 **TypeScript contract** (`web/src/types/index.ts`):
 These interfaces are the shared contract. The Go backend (Part 15) must return JSON that matches these shapes exactly.
 
-**Controller flow** (Part 14+):
-`Watch Helm secrets → decode (base64→gzip→JSON) → parallel workers (drift diff, version check, health roll-up) → merge result → write CRD + SQLite + broadcast WS`
+**Controller flow** (`internal/controller/reconciler.go`):
+`Watch Helm secrets (owner=helm label) → decode (base64→gzip→JSON) → parallel workers with semaphore (drift diff, version check, health roll-up) → merge → write SQLite + broadcast WS`
+
+- `EventBroadcaster` interface defined in `internal/controller` to avoid import cycle with `internal/api`
+- Worker concurrency controlled by buffered channel semaphore (default 4)
+- K8s config resolution: explicit `--kubeconfig` flag → in-cluster → `~/.kube/config`
 
 **Health roll-up logic**:
 - Failed: any pod in CrashLoopBackOff / OOMKilled, or Helm status = failed
@@ -72,29 +90,39 @@ These interfaces are the shared contract. The Go backend (Part 15) must return J
 
 ### Directory layout
 ```
-cmd/controller/       # main.go entry point
+cmd/controller/       # main.go — flags: --kubeconfig, --workers, --addr, --db
 internal/
-  api/                # chi router, REST handlers, WebSocket hub
-  controller/         # controller-runtime reconciler
-  helm/               # Helm secret decoder, values drift
-  health/             # workload health aggregator
+  api/                # chi router, REST handlers, WebSocket hub (ws.go)
+  controller/         # k8s informer reconciler + EventBroadcaster interface
+  helm/               # Helm secret decoder + values drift diff
+  health/             # workload health aggregator (Deployments/SS/DS/Pods)
   registry/           # ArtifactHub + OCI version checker
-  store/              # SQLite repositories + migrations
-pkg/apis/v1alpha1/    # HelmReleaseReport CRD Go types
+  store/              # SQLite: db.go (schema+migrations), release_repo.go, event_repo.go
+pkg/apis/v1alpha1/    # Shared Go types — JSON tags must match web/src/types/index.ts exactly
 config/
   crd/                # CRD YAML manifests
   rbac/               # ClusterRole/Binding/ServiceAccount
-  deploy/             # Kustomize EKS overlay
+  deploy/             # Kustomize overlay (namespace: helmsight)
 chart/                # Helm chart for HelmSight itself
-web/                  # React frontend
+web/                  # React frontend (Vite)
   src/
-    api/              # client.ts (hooks) + mock.ts (mock data)
-    types/            # TypeScript interfaces (index.ts)
-    pages/            # One file per route
-    components/ui/    # shadcn primitives
-    hooks/            # Custom React hooks (Part 16+)
-    lib/              # utils.ts (cn helper)
+    api/              # client.ts (real API hooks) + mock.ts (test fixtures)
+    types/            # TypeScript interfaces (index.ts) — source of truth for JSON shapes
+    pages/            # One file per route + colocated .test.tsx files
+    components/
+      layout/         # Sidebar, Header
+      ui/             # shadcn primitives
+    hooks/            # useEventsFeed (WebSocket), useKeyboardNav
+    lib/              # utils.ts (cn), health.ts (badge helpers), time.ts
 ```
+
+### JSON contract
+`pkg/apis/v1alpha1/types.go` JSON tags must stay in sync with `web/src/types/index.ts`. Notable non-obvious mappings:
+- `VersionStatus.Installed` → `json:"deployed"`
+- `DriftEntry.DeployedValue` → `json:"userValue"`
+- `HelmEvent.Message` → `json:"description"`, `.Details` → `json:"delta"`
+- `ClusterSummary.LastUpdated` → `json:"lastScanTime"`
+- `NamespaceSummary.Health` → `json:"worstHealth"`
 
 ### Color conventions (enforced across all parts)
 | Signal | Color |
@@ -113,3 +141,9 @@ web/                  # React frontend
 - Dark mode uses `.dark` class variant (not `prefers-color-scheme`)
 - PostCSS plugin is `@tailwindcss/postcss`, not the legacy `tailwindcss` plugin
 - Path alias `@/` resolves to `web/src/`
+
+### SQLite filtering
+`internal/store/release_repo.go` uses `json_extract()` to filter on JSON blob columns:
+- `version_status` blob: severity (`json_extract(version_status, '$.severity')`), upgradeAvailable
+- Multi-namespace filter uses SQL `IN` clause
+- `hasDrift` filters on `drift_count > 0` column
