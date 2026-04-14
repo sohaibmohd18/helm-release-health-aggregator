@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Package, TrendingUp, Radio, Layers, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, Package, TrendingUp, Radio, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -20,11 +20,8 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r bg-card">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 border-b px-4 py-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-          <Layers size={15} className="text-primary-foreground" />
-        </div>
-        <span className="text-base font-semibold tracking-tight">HelmSight</span>
+      <div className="flex items-center border-b px-4 py-3">
+        <img src="/logo.png" alt="HelmSight" className="h-8 w-auto" />
       </div>
 
       {/* Cluster selector */}
