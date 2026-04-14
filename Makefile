@@ -1,9 +1,9 @@
 BINARY_NAME := helmsight
 MODULE      := github.com/sohaibmohmd18/helm-release-health-aggregator
-IMAGE_NAME  := helmsight
+IMAGE_NAME  := sohaibmohd/helmsight
 IMAGE_TAG   ?= latest
 
-.PHONY: build run fmt lint test docker-build web-install web-dev web-build generate
+.PHONY: build run fmt lint test docker-build docker-push docker-deploy web-install web-dev web-build generate
 
 ## Go targets
 build:
@@ -23,7 +23,14 @@ test:
 
 ## Docker
 docker-build:
-	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	docker build --platform linux/amd64 -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+docker-push:
+	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+
+docker-deploy: docker-build docker-push
+	kubectl rollout restart deploy/helmsight -n helmsight
+	kubectl rollout status deploy/helmsight -n helmsight
 
 ## Frontend targets
 web-install:

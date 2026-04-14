@@ -1,5 +1,5 @@
 # ─── Stage 1: Build frontend ──────────────────────────────────────────────────
-FROM node:20-alpine AS frontend-builder
+FROM --platform=linux/amd64 node:20-alpine AS frontend-builder
 
 WORKDIR /app/web
 
@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # ─── Stage 2: Build Go binary ─────────────────────────────────────────────────
-FROM golang:1.26-alpine AS go-builder
+FROM --platform=linux/amd64 golang:1.26-alpine AS go-builder
 
 # Install git (needed for VCS stamping) and ca-certs
 RUN apk add --no-cache git ca-certificates
@@ -31,7 +31,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     -o /helmsight ./cmd/controller/...
 
 # ─── Stage 3: Minimal runtime image ───────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM --platform=linux/amd64 gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /
 
 # Copy TLS certificates from builder (needed for HTTPS calls to ArtifactHub)
 COPY --from=go-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

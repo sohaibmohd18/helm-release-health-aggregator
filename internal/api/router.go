@@ -43,20 +43,51 @@ func NewRouter(s *Server, log *zap.Logger) http.Handler {
 	return r
 }
 
-// fileServer serves static files from dir at the given pattern prefix.
-// Every unknown route falls through to index.html (SPA mode).
+// fileServer serves static files from root at the given path prefix.
+// Every path that maps to a directory or a missing file falls back to
+// index.html so React Router can handle client-side navigation.
 func fileServer(r chi.Router, path string, root http.FileSystem) {
-	fs := http.StripPrefix(path, http.FileServer(root))
-	r.Get(path+"*", func(w http.ResponseWriter, req *http.Request) {
-		// Try serving the file; fall back to index.html for SPA routing
+	serve := func(w http.ResponseWriter, req *http.Request) {
 		f, err := root.Open(req.URL.Path)
 		if err != nil {
-			req.URL.Path = "/"
-		} else {
-			_ = f.Close()
+			// Path not found — SPA fallback.
+			spaFallback(w, req, root)
+			return
 		}
-		fs.ServeHTTP(w, req)
-	})
+		fi, statErr := f.Stat()
+		f.Close()
+		if statErr != nil || fi.IsDir() {
+			// Directory — SPA fallback.
+			spaFallback(w, req, root)
+			return
+		}
+		// Serve the actual static asset.
+		http.FileServer(root).ServeHTTP(w, req)
+	}
+
+	// chi's /* wildcard does not match the bare "/", so register it explicitly.
+	if path == "/" {
+		r.Get("/", serve)
+	}
+	r.Get(path+"*", serve)
+}
+
+// spaFallback serves index.html via http.ServeContent instead of http.FileServer.
+// http.FileServer redirects /index.html → / which creates an infinite loop;
+// http.ServeContent serves the bytes directly with no redirect logic.
+func spaFallback(w http.ResponseWriter, req *http.Request, root http.FileSystem) {
+	f, err := root.Open("/index.html")
+	if err != nil {
+		http.NotFound(w, req)
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		http.NotFound(w, req)
+		return
+	}
+	http.ServeContent(w, req, "index.html", fi.ModTime(), f)
 }
 
 // zapLogger is a chi middleware that logs each request with zap.
