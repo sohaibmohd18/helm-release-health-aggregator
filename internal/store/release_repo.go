@@ -120,11 +120,11 @@ func (db *DB) ClusterSummary(clusterName string) (v1alpha1.ClusterSummary, error
 	row := db.QueryRow(`
 		SELECT
 			COUNT(*),
-			SUM(CASE WHEN health='Healthy'  THEN 1 ELSE 0 END),
-			SUM(CASE WHEN health='Degraded' THEN 1 ELSE 0 END),
-			SUM(CASE WHEN health='Failed'   THEN 1 ELSE 0 END),
-			SUM(CASE WHEN health='Unknown'  THEN 1 ELSE 0 END),
-			SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1 THEN 1 ELSE 0 END)
+			COALESCE(SUM(CASE WHEN health='Healthy'  THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN health='Degraded' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN health='Failed'   THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN health='Unknown'  THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN json_extract(version_status,'$.upgradeAvailable')=1 THEN 1 ELSE 0 END), 0)
 		FROM releases`)
 	var s v1alpha1.ClusterSummary
 	s.ClusterName = clusterName
